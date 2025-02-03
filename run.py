@@ -3,11 +3,11 @@ import time
 import logging
 from typing import Dict, Any, List
 
-import pyautogui
 from hexss import json_load, json_update, check_packages
 
-check_packages('numpy', 'opencv-python', 'Flask', 'mss', install=True)
+check_packages('numpy', 'opencv-python', 'Flask', 'mss', 'PyAutoGUI', install=True)
 
+import pyautogui
 import mss
 from hexss import get_hostname
 from hexss.network import get_all_ipv4, close_port
