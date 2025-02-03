@@ -26,17 +26,12 @@ logging.basicConfig(
 
 
 def display_capture(data: Dict[str, Any]) -> None:
-    if platform.system() != "Windows":
-        logging.warning("Display capture is only supported on Windows.")
-        return
-
     with mss.mss() as sct:
         while data['play']:
             try:
-                screenshot = sct.grab(sct.monitors[2])
+                screenshot = sct.grab(sct.monitors[1])
                 image = np.array(screenshot)
                 data['display_capture'] = image
-                time.sleep(0.01)
             except Exception as e:
                 logging.error(f"Error in display capture: {e}")
                 time.sleep(1)
@@ -45,12 +40,17 @@ def display_capture(data: Dict[str, Any]) -> None:
 def get_data(data: Dict[str, Any], quality=100) -> np.ndarray:
     frame = data['display_capture']
 
-    if quality == 100:
-        ret, buffer = cv2.imencode('.jpg', frame)
-    else:
-        encode_param = [cv2.IMWRITE_JPEG_QUALITY, quality]  # Adjust quality (0-100)
-        ret, buffer = cv2.imencode('.jpg', frame, encode_param)
+    encode_param = [cv2.IMWRITE_JPEG_QUALITY, quality]  # Adjust quality (0-100)
+    ret, buffer = cv2.imencode('.jpg', frame, encode_param)
     return buffer
+
+
+@app.after_request
+def add_cache_headers(response):
+    response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+    response.headers['Pragma'] = 'no-cache'
+    response.headers['Expires'] = '0'
+    return response
 
 
 @app.route('/')
@@ -69,36 +69,67 @@ def get_video():
             frame = buffer.tobytes()
             yield (b'--frame\r\n'
                    b'Content-Type: image/jpeg\r\n\r\n' + frame + b'\r\n')
+            time.sleep(0.1)
 
     return Response(generate(), mimetype='multipart/x-mixed-replace; boundary=frame')
 
 
-@app.route('/position', methods=['POST'])
-def get_position():
+@app.route('/mouse', methods=['POST'])
+def handle_mouse():
     position = request.json
     x = position.get('x')
     y = position.get('y')
-    click_type = position.get('type')  # Identify type of event
+    event_type = position.get('type')
 
-    print(f"Received {click_type} at position - X: {x}, Y: {y}")
+    print(f"Received {event_type} at position - X: {x}, Y: {y}")
 
-    # Handle mouse events
-    if click_type == 'left-click-down':
-        pyautogui.mouseDown(x=x * 1920, y=y * 1080, button='left')  # Simulate left mouse press
-    elif click_type == 'left-click-up':
-        pyautogui.mouseUp(x=x * 1920, y=y * 1080, button='left')  # Simulate left mouse release
-    elif click_type == 'right-click-down':
-        pyautogui.mouseDown(x=x * 1920, y=y * 1080, button='right')  # Simulate right mouse press
-    elif click_type == 'right-click-up':
-        pyautogui.mouseUp(x=x * 1920, y=y * 1080, button='right')  # Simulate right mouse release
-    elif click_type == 'middle-click-down':
-        pyautogui.mouseDown(x=x * 1920, y=y * 1080, button='middle')  # Simulate middle mouse press
-    elif click_type == 'middle-click-up':
-        pyautogui.mouseUp(x=x * 1920, y=y * 1080, button='middle')  # Simulate middle mouse release
+    # Dispatch event types
+    if event_type == 'left-click-down':
+        pyautogui.mouseDown(x=x * 1920, y=y * 1080, button='left')
+    elif event_type == 'left-click-up':
+        pyautogui.mouseUp(x=x * 1920, y=y * 1080, button='left')
+    elif event_type == 'right-click-down':
+        pyautogui.mouseDown(x=x * 1920, y=y * 1080, button='right')
+    elif event_type == 'right-click-up':
+        pyautogui.mouseUp(x=x * 1920, y=y * 1080, button='right')
+    elif event_type == 'middle-click-down':
+        pyautogui.mouseDown(x=x * 1920, y=y * 1080, button='middle')
+    elif event_type == 'middle-click-up':
+        pyautogui.mouseUp(x=x * 1920, y=y * 1080, button='middle')
+    elif event_type == 'scroll-up':
+        pyautogui.moveTo(x * 1920, y * 1080)
+        pyautogui.scroll(500)  # Simulate scroll up
+    elif event_type == 'scroll-down':
+        pyautogui.moveTo(x * 1920, y * 1080)
+        pyautogui.scroll(-500)  # Simulate scroll down
+    elif event_type == 'mouse-move':
+        pyautogui.moveTo(x * 1920, y * 1080)  # Simulate mouse move
 
-    return {"message": "Position received successfully"}, 200
+    return {"message": "Event received successfully"}, 200
 
 
+@app.route('/keyboard', methods=['POST'])
+def handle_keyboard():
+    data = request.json
+    event_type = data.get('eventType')  # 'keydown' or 'keyup'
+    key = data.get('key')  # The actual key pressed (e.g., "a", "Enter")
+    code = data.get('code')  # The physical code (e.g., "KeyA", "Enter")
+
+    print(f"Received {event_type} event for key: {key}, code: {code}")
+
+    if event_type == 'keydown':
+        try:
+            pyautogui.keyDown(key)
+        except Exception as e:
+            logging.error(f"Error in keydown simulation: {e}")
+
+    elif event_type == 'keyup':
+        try:
+            pyautogui.keyUp(key)
+        except Exception as e:
+            logging.error(f"Error in keyup simulation: {e}")
+
+    return {"message": "Keyboard event processed"}, 200
 
 
 def run_server(data: Dict[str, Any]) -> None:

@@ -29,71 +29,146 @@
 <img src="{{ url_for('get_video') }}" alt="Display Capture" id="capture">
 
 <script>
-    const captureImage = document.getElementById('capture');
-
-    // Disable right-click context menu
-    captureImage.addEventListener('contextmenu', (event) => {
-        event.preventDefault(); // Prevent the default right-click menu
-    });
-
-    // Disable dragging of the image
-    captureImage.addEventListener('dragstart', (event) => {
-        event.preventDefault(); // Prevent drag-and-drop functionality
-    });
-
-    // Handle mouse events like left-click, middle-click, but ignore movement
-    captureImage.addEventListener('mousedown', (event) => {
-        let eventType = getClickType(event);
-        if (eventType) {
-            handleMouseEvent(event, `${eventType}-down`); // Event when the button is pressed
-        }
-    });
-
-    captureImage.addEventListener('mouseup', (event) => {
-        let eventType = getClickType(event);
-        if (eventType) {
-            handleMouseEvent(event, `${eventType}-up`); // Event when the button is released
-        }
-    });
-
-    // Detect the type of mouse click
-    function getClickType(event) {
-        switch (event.button) {
-            case 0: return 'left-click';    // Left-click
-            case 1: return 'middle-click'; // Middle-click
-            case 2: return 'right-click';  // Right-click
-            default: return null;
+    // Returns the name of mouse button clicked.
+    function getClickType(button) {
+        switch (button) {
+            case 0:
+                return 'left-click'; // Left mouse button
+            case 1:
+                return 'middle-click'; // Middle mouse button (scroll wheel)
+            case 2:
+                return 'right-click'; // Right mouse button
+            default:
+                return null; // Ignore unsupported buttons
         }
     }
 
-    // Shared function to handle mouse click events
-    function handleMouseEvent(event, eventType) {
-        const rect = event.target.getBoundingClientRect();
-        const x = event.clientX - rect.left;
-        const y = event.clientY - rect.top;
+    // Sends mouse event data to the server.
+    function sendMouseEvent(event, eventType) {
+        const {clientX, clientY, target} = event; // Destructure event parameters
 
-        const width = rect.width;
-        const height = rect.height;
+        if (!(target instanceof HTMLElement)) return; // Ensure target is valid
+        const rect = target.getBoundingClientRect(); // Get element dimensions/position
 
-        const normalizedX = x / width;
-        const normalizedY = y / height;
+        // Calculate normalized positions (range: 0.0 - 1.0)
+        const normalizedX = (clientX - rect.left) / rect.width;
+        const normalizedY = (clientY - rect.top) / rect.height;
 
-        console.log(`Event Type: ${eventType}`);
-        console.log('Normalized Position - X:', normalizedX.toFixed(2), 'Y:', normalizedY.toFixed(2));
+        console.log(`Event: ${eventType}, Normalized Position -> X: ${normalizedX.toFixed(2)}, Y: ${normalizedY.toFixed(2)}`);
 
-        // Send the event data to the server
-        fetch('/position', {
+        // Asynchronous POST request with fetch
+        fetch('/mouse', {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({x: normalizedX, y: normalizedY, type: eventType}),
-        }).then(response => {
-            if (!response.ok) {
-                console.error('Failed to send position.');
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                x: normalizedX,
+                y: normalizedY,
+                type: eventType,
+            }),
+        })
+            .then(response => {
+                if (!response.ok) {
+                    console.error(`Error: Failed to send ${eventType} event. Server responded with status ${response.status}`);
+                }
+            })
+            .catch(error => {
+                console.error(`Error: Request failed for ${eventType}.`, error);
+            });
+    }
+
+    // Sends keyboard event data to the server.
+    function sendKeyboardEvent(event, eventType) {
+        const key = event.key; // The actual key pressed, e.g., "a", "Enter"
+        const code = event.code; // The physical key code, e.g., "KeyA", "Enter"
+
+        console.log(`Event: ${eventType}, Key: ${key}, Code: ${code}`);
+
+        // Asynchronous POST request with fetch
+        fetch('/keyboard', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                eventType: eventType, // e.g., "keydown" or "keyup"
+                key: key,
+                code: code,
+            }),
+        })
+            .then(response => {
+                if (!response.ok) {
+                    console.error(`Error: Failed to send ${eventType} event. Server responded with status ${response.status}`);
+                }
+            })
+            .catch(error => {
+                console.error(`Error: Request failed for ${eventType}.`, error);
+            });
+    }
+
+
+    let lastMouseMoveTime = 0;
+
+
+    document.addEventListener('DOMContentLoaded', () => {
+        const captureImage = document.getElementById('capture'); // Find target element
+
+        if (!captureImage) {
+            console.warn("Warning: Target element with ID 'capture' not found.");
+            return;
+        }
+
+        // Disable right-click context menu
+        captureImage.addEventListener('contextmenu', (event) => {
+            event.preventDefault();
+        });
+
+        // Disable dragging of the image
+        captureImage.addEventListener('dragstart', (event) => {
+            event.preventDefault();
+        });
+
+        // Handle keydown events
+        document.addEventListener('keydown', (event) => {
+            sendKeyboardEvent(event, 'keydown');
+        });
+
+        // Handle keyup events
+        document.addEventListener('keyup', (event) => {
+            sendKeyboardEvent(event, 'keyup');
+        });
+
+        // Handle mouse-down events
+        captureImage.addEventListener('mousedown', (event) => {
+            const eventType = getClickType(event.button);
+            if (eventType) {
+                sendMouseEvent(event, `${eventType}-down`);
             }
         });
-    }
+
+        // Handle mouse-up events
+        captureImage.addEventListener('mouseup', (event) => {
+            const eventType = getClickType(event.button);
+            if (eventType) {
+                sendMouseEvent(event, `${eventType}-up`);
+            }
+        });
+
+        // Handle mouse-move events
+        captureImage.addEventListener('mousemove', (event) => {
+            const now = Date.now();
+
+            if (now - lastMouseMoveTime > 50) {
+                lastMouseMoveTime = now;
+                sendMouseEvent(event, 'mouse-move');
+            }
+        });
+
+        // Handle scroll events
+        captureImage.addEventListener('wheel', (event) => {
+            const scrollDirection = event.deltaY < 0 ? 'scroll-up' : 'scroll-down';
+            sendMouseEvent(event, scrollDirection);
+        });
+    });
+
+
 </script>
 </body>
 </html>
