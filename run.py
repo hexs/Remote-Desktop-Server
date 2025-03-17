@@ -5,7 +5,7 @@ from typing import Dict, Any, List
 
 from hexss import json_load, json_update, check_packages
 
-check_packages('numpy', 'opencv-python', 'Flask', 'mss', 'PyAutoGUI', install=True)
+check_packages('numpy', 'opencv-python', 'Flask', 'mss', 'PyAutoGUI', auto_install=True)
 
 import pyautogui
 import mss
@@ -69,7 +69,7 @@ def get_video():
             frame = buffer.tobytes()
             yield (b'--frame\r\n'
                    b'Content-Type: image/jpeg\r\n\r\n' + frame + b'\r\n')
-            time.sleep(0.1)
+            time.sleep(0.3)
 
     return Response(generate(), mimetype='multipart/x-mixed-replace; boundary=frame')
 
@@ -146,10 +146,10 @@ def run_server(data: Dict[str, Any]) -> None:
 def run():
     data = {
         'play': True,
-        'config': json_load('camera_server_config.json', {
+        'config': {
             "ipv4": '0.0.0.0',
             "port": 2003
-        }),
+        },
         'display_capture': np.full((480, 640, 3), (50, 50, 50), dtype=np.uint8)
     }
     close_port(data['config']['ipv4'], data['config']['port'], verbose=False)

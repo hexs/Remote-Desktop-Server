@@ -155,7 +155,7 @@
         captureImage.addEventListener('mousemove', (event) => {
             const now = Date.now();
 
-            if (now - lastMouseMoveTime > 200) {
+            if (now - lastMouseMoveTime > 500) {
                 lastMouseMoveTime = now;
                 sendMouseEvent(event, 'mouse-move');
             }
